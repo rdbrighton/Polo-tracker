@@ -9,7 +9,8 @@
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-<body class="h-screen overflow-hidden">
+<body class="h-screen">
+
 <div id="app" class="h-screen"></div>
 
 <script>
@@ -29,7 +30,7 @@ localStorage.setItem("wp_teams",JSON.stringify(teams));
 localStorage.setItem("wp_matches",JSON.stringify(matches));
 }
 
-/* ---------------- MATCH ID ---------------- */
+/* ---------------- MATCH ID (FIXED) ---------------- */
 
 function generateMatchID(){
 
@@ -45,7 +46,6 @@ typeof m.id === "string" && m.id.startsWith(base)
 ).length + 1;
 
 return base + "_" + count.toString().padStart(2,'0');
-
 }
 
 /* ---------------- HOME ---------------- */
@@ -199,31 +199,26 @@ White <select id="w" class="text-black w-full mb-3">${opts}</select>
 
 function createMatch(){
 
-let b = document.getElementById("b").value;
-let w = document.getElementById("w").value;
-
-if(!b || !w){
-alert("Please select both teams");
-return;
-}
+let b=document.getElementById("b").value;
+let w=document.getElementById("w").value;
 
 let blueTeam = teams.find(t => t.name == b);
 let whiteTeam = teams.find(t => t.name == w);
 
 if(!blueTeam || !whiteTeam){
-alert("Teams not found. Please check team setup.");
+alert("Please select valid teams");
 return;
 }
 
-currentMatch = {
-id: generateMatchID(),
-blueTeam: b,
-whiteTeam: w,
-events: [],
-eventSeq: 0,
-players: [
-...blueTeam.players.map(p => ({...p, team:"blue"})),
-...whiteTeam.players.map(p => ({...p, team:"white"}))
+currentMatch={
+id:generateMatchID(),
+blueTeam:b,
+whiteTeam:w,
+events:[],
+eventSeq:0,
+players:[
+...blueTeam.players.map(p=>({...p,team:"blue"})),
+...whiteTeam.players.map(p=>({...p,team:"white"}))
 ]
 };
 
@@ -310,10 +305,8 @@ return `
 class="py-2 border-b">
 
 <div class="flex items-center">
-
 <div class="text-2xl font-bold mr-2">#${p.cap}</div>
 <div class="text-base">${p.name}</div>
-
 </div>
 
 <div class="text-xs mt-1">
@@ -349,11 +342,8 @@ let m = matches[index];
 let csv = "matchID,eventTime,team,cap,playerName,eventType\n";
 
 m.events.forEach(e=>{
-
 let p = m.players.find(x=>x.cap==e.cap && x.team==e.team);
-
 csv += `${m.id},${e.time},${e.team},${e.cap},${p.name},${e.type}\n`;
-
 });
 
 downloadFile(csv, `match_${m.id}.csv`);
@@ -362,20 +352,15 @@ downloadFile(csv, `match_${m.id}.csv`);
 function exportJSON(index){
 
 let m = matches[index];
-
 let json = JSON.stringify(m, null, 2);
-
 downloadFile(json, `match_${m.id}.json`);
 }
 
 function downloadFile(content, filename){
 
 const a = document.createElement("a");
-
 a.href = "data:text/plain;charset=utf-8," + encodeURIComponent(content);
-
 a.download = filename;
-
 a.click();
 }
 
@@ -409,11 +394,10 @@ html+=`
 });
 
 html+=`</div>`;
-
 document.getElementById("app").innerHTML=html;
 }
 
-/* ---------------- RENDER MATCH ---------------- */
+/* ---------------- RENDER MATCH (FIXED LAYOUT) ---------------- */
 
 function renderMatch(){
 
@@ -431,19 +415,23 @@ let html=`
 
 </div>
 
-<div class="flex flex-1">
+<div class="flex flex-1 min-h-0">
 
-<div class="w-1/2 bg-blue-900 text-white p-2 overflow-y-auto">
-${renderList("blue")}
+<div class="w-1/2 bg-blue-900 text-white p-2 flex flex-col min-h-0">
+  <div class="flex-1 overflow-y-auto">
+    ${renderList("blue")}
+  </div>
 </div>
 
-<div class="w-1/2 bg-gray-100 text-black p-2 overflow-y-auto">
-${renderList("white")}
+<div class="w-1/2 bg-gray-100 text-black p-2 flex flex-col min-h-0">
+  <div class="flex-1 overflow-y-auto">
+    ${renderList("white")}
+  </div>
 </div>
 
 </div>
 
-<div class="h-20 overflow-y-scroll bg-slate-800 text-white text-xs p-2">
+<div class="h-20 overflow-y-auto bg-slate-800 text-white text-xs p-2">
 ${timeline()}
 </div>
 
