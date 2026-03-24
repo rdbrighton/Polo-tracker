@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Water Polo Tracker</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="h-screen overflow-hidden">
+<div id="app" class="h-screen"></div>
+
+<script>
+
+/* ---------------- DATA ---------------- */
+
+let teams = JSON.parse(localStorage.getItem("wp_teams")) || [];
+let matches = JSON.parse(localStorage.getItem("wp_matches")) || [];
+
+let currentMatch=null;
+let selectedPlayer=null;
+
+/* ---------------- SAVE ---------------- */
+
+function save(){
+localStorage.setItem("wp_teams",JSON.stringify(teams));
+localStorage.setItem("wp_matches",JSON.stringify(matches));
+}
+
+/* ---------------- MATCH ID ---------------- */
+
+function generateMatchID(){
+
+let d = new Date();
+
+let base =
+d.getDate().toString().padStart(2,'0') +
+(d.getMonth()+1).toString().padStart(2,'0') +
+d.getFullYear();
+
+let count = matches.filter(m => 
+typeof m.id === "string" && m.id.startsWith(base)
+).length + 1;
+
+return base + "_" + count.toString().padStart(2,'0');
+
+}
+
+/* ---------------- HOME ---------------- */
+
+function home(){
+document.getElementById("app").innerHTML=`
+<div class="flex flex-col h-full items-center justify-center gap-4 bg-slate-900 text-white">
+
+<h1 class="text-2xl font-bold">Water Polo Tracker</h1>
+
+<button onclick="startSetup()" class="bg-green-600 px-6 py-3 rounded">Start Match</button>
+<button onclick="teamManager()" class="bg-blue-600 px-6 py-3 rounded">Manage Teams</button>
+<button onclick="history()" class="bg-purple-600 px-6 py-3 rounded">Match History</button>
+<button onclick="resetDB()" class="bg-red-600 px-6 py-3 rounded">Reset</button>
+
+</div>`;
+}
+
+/* ---------------- RESET ---------------- */
+
+function resetDB(){
+if(!confirm("Clear ALL data?")) return;
+localStorage.clear();
+teams=[]; matches=[];
+home();
+}
+
+/* ---------------- TEAM MANAGER ---------------- */
+
+function teamManager(){
+
+let html=`<div class="p-4 bg-slate-900 text-white h-full overflow-y-auto">
+
+<h2 class="text-xl mb-3">Teams</h2>
+
+<button onclick="addTeam()" class="bg-green-600 px-3 py-1 rounded mb-2">Add Team</button>
+
+<input type="file" accept=".csv" onchange="importCSV(event)" class="mb-3">
+
+<button onclick="home()" class="bg-gray-600 px-3 py-1 rounded mb-3">Back</button>
+`;
+
+teams.forEach((t,i)=>{
+html+=`
+<div class="border-b py-2">
+${t.name}
+<button onclick="editTeam(${i})" class="ml-2 bg-slate-700 px-2 rounded">Edit</button>
+<button onclick="teams.splice(${i},1);save();teamManager()" class="ml-1 bg-red-700 px-2 rounded">Del</button>
+</div>`;
+});
+
+html+=`</div>`;
+document.getElementById("app").innerHTML=html;
+}
+
+function addTeam(){
+const name=prompt("Team name");
+if(!name) return;
+teams.push({name,players:[]});
+save(); teamManager();
+}
+
+function editTeam(i){
+
+let t=teams[i];
+
+let html=`<div class="p-4 bg-slate-900 text-white h-full overflow-y-auto">
+
+<h2>${t.name}</h2>
+
+<button onclick="teamManager()" class="bg-gray-600 px-2 rounded mb-2">Back</button>
+<button onclick="addPlayer(${i})" class="bg-green-600 px-2 rounded mb-2">Add Player</button>
+`;
+
+t.players.sort((a,b)=>a.cap-b.cap);
+
+t.players.forEach((p,pi)=>{
+html+=`
+<div>#${p.cap} ${p.name}
+<button onclick="teams[${i}].players.splice(${pi},1);save();editTeam(${i})" class="bg-red-600 px-2 rounded">X</button>
+</div>`;
+});
+
+html+=`</div>`;
+document.getElementById("app").innerHTML=html;
+}
+
+function addPlayer(i){
+const cap=parseInt(prompt("Cap"));
+const name=prompt("Name");
+teams[i].players.push({cap,name});
+save(); editTeam(i);
+}
+
+/* ---------------- CSV IMPORT ---------------- */
+
+function importCSV(e){
+
+const file=e.target.files[0];
+if(!file) return;
+
+const r=new FileReader();
+
+r.onload=function(ev){
+
+let rows=ev.target.result.split("\n").map(x=>x.trim()).filter(x=>x);
+
+let h=rows.shift().split(",");
+
+let map={};
+
+rows.forEach(r=>{
+let c=r.split(",");
+let team=c[h.indexOf("team")];
+let cap=parseInt(c[h.indexOf("cap")]);
+let name=c[h.indexOf("name")];
+
+if(!map[team]) map[team]={name:team,players:[]};
+
+map[team].players.push({cap,name});
+});
+
+teams=Object.values(map);
+teams.forEach(t=>t.players.sort((a,b)=>a.cap-b.cap));
+
+save();
+alert("Imported");
+teamManager();
+
+};
+
+r.readAsText(file);
+}
+
+/* ---------------- MATCH ---------------- */
+
+function startSetup(){
+
+let opts=teams.map(t=>`<option>${t.name}</option>`).join("");
+
+document.getElementById("app").innerHTML=`
+<div class="p-4 bg-slate-900 text-white h-full">
+
+Blue <select id="b" class="text-black w-full mb-3">${opts}</select>
+White <select id="w" class="text-black w-full mb-3">${opts}</select>
+
+<button onclick="createMatch()" class="bg-green-600 px-3 py-2 rounded">Start</button>
+
+</div>`;
+}
+
+function createMatch(){
+
+let b = document.getElementById("b").value;
+let w = document.getElementById("w").value;
+
+if(!b || !w){
+alert("Please select both teams");
+return;
+}
+
+let blueTeam = teams.find(t => t.name == b);
+let whiteTeam = teams.find(t => t.name == w);
+
+if(!blueTeam || !whiteTeam){
+alert("Teams not found. Please check team setup.");
+return;
+}
+
+currentMatch = {
+id: generateMatchID(),
+blueTeam: b,
+whiteTeam: w,
+events: [],
+eventSeq: 0,
+players: [
+...blueTeam.players.map(p => ({...p, team:"blue"})),
+...whiteTeam.players.map(p => ({...p, team:"white"}))
+]
+};
+
+matches.push(currentMatch);
+save();
+
+renderMatch();
+}
+
+/* ---------------- EVENTS ---------------- */
+
+function addEvent(team,cap,type){
+
+currentMatch.eventSeq++;
+
+let now = new Date();
+
+let time = now.getHours().toString().padStart(2,'0') + ":" +
+           now.getMinutes().toString().padStart(2,'0') + ":" +
+           now.getSeconds().toString().padStart(2,'0');
+
+currentMatch.events.push({
+eventSeq:currentMatch.eventSeq,
+time: time,
+team,cap,type
+});
+
+save();
+}
+
+function deleteEvent(seq){
+currentMatch.events=currentMatch.events.filter(e=>e.eventSeq!==seq);
+save(); renderMatch();
+}
+
+/* ---------------- GK LINK ---------------- */
+
+function creditGK(team,type){
+
+let opp=team=="blue"?"white":"blue";
+let gk=currentMatch.players.find(p=>p.team==opp && p.cap==1);
+
+if(!gk) return;
+
+if(type=="shot_saved") addEvent(gk.team,gk.cap,"save");
+if(type=="5m_saved") addEvent(gk.team,gk.cap,"save_5m");
+}
+
+/* ---------------- ACTION ---------------- */
+
+function action(type){
+
+addEvent(selectedPlayer.team,selectedPlayer.cap,type);
+
+if(type=="shot_saved"||type=="5m_saved"){
+creditGK(selectedPlayer.team,type);
+}
+
+selectedPlayer=null;
+renderMatch();
+}
+
+/* ---------------- STATS ---------------- */
+
+function stat(team,cap,type){
+return currentMatch.events.filter(e=>e.team==team && e.cap==cap && e.type==type).length;
+}
+
+function score(team){
+return currentMatch.events.filter(e=>e.team==team && e.type=="goal").length;
+}
+
+/* ---------------- PLAYER LIST ---------------- */
+
+function renderList(team){
+
+return currentMatch.players
+.filter(p=>p.team==team)
+.sort((a,b)=>a.cap-b.cap)
+.map(p=>{
+
+return `
+<div onclick="selectedPlayer=currentMatch.players.find(x=>x.cap==${p.cap} && x.team=='${team}');renderMatch();" 
+class="py-2 border-b">
+
+<div class="flex items-center">
+
+<div class="text-2xl font-bold mr-2">#${p.cap}</div>
+<div class="text-base">${p.name}</div>
+
+</div>
+
+<div class="text-xs mt-1">
+Goals ${stat(team,p.cap,"goal")} | 
+Misses ${stat(team,p.cap,"miss")} | 
+Exclusions ${stat(team,p.cap,"exclusion")}
+</div>
+
+</div>
+`;
+
+}).join("");
+}
+
+/* ---------------- TIMELINE ---------------- */
+
+function timeline(){
+
+return [...currentMatch.events].reverse().map(e=>`
+<div class="flex justify-between border-b py-1">
+<div>${e.time} | ${e.team} #${e.cap} | ${e.type}</div>
+<button onclick="deleteEvent(${e.eventSeq})" class="bg-red-600 px-1 rounded">X</button>
+</div>
+`).join("");
+}
+
+/* ---------------- EXPORT ---------------- */
+
+function exportCSV(index){
+
+let m = matches[index];
+
+let csv = "matchID,eventTime,team,cap,playerName,eventType\n";
+
+m.events.forEach(e=>{
+
+let p = m.players.find(x=>x.cap==e.cap && x.team==e.team);
+
+csv += `${m.id},${e.time},${e.team},${e.cap},${p.name},${e.type}\n`;
+
+});
+
+downloadFile(csv, `match_${m.id}.csv`);
+}
+
+function exportJSON(index){
+
+let m = matches[index];
+
+let json = JSON.stringify(m, null, 2);
+
+downloadFile(json, `match_${m.id}.json`);
+}
+
+function downloadFile(content, filename){
+
+const a = document.createElement("a");
+
+a.href = "data:text/plain;charset=utf-8," + encodeURIComponent(content);
+
+a.download = filename;
+
+a.click();
+}
+
+/* ---------------- HISTORY ---------------- */
+
+function history(){
+
+let html=`
+<div class="p-4 bg-slate-900 text-white h-full overflow-y-auto">
+
+<h2 class="text-xl mb-3">Match History</h2>
+
+<button onclick="home()" class="bg-gray-600 px-3 py-1 rounded mb-3">Back</button>
+`;
+
+matches.forEach((m,i)=>{
+
+html+=`
+<div class="border-b py-2">
+
+<div class="font-bold">${m.blueTeam} vs ${m.whiteTeam}</div>
+
+<div class="text-xs mb-2">Match ID: ${m.id}</div>
+
+<button onclick="exportCSV(${i})" class="bg-green-600 px-2 py-1 rounded mr-2">CSV</button>
+<button onclick="exportJSON(${i})" class="bg-blue-600 px-2 py-1 rounded">JSON</button>
+
+</div>
+`;
+
+});
+
+html+=`</div>`;
+
+document.getElementById("app").innerHTML=html;
+}
+
+/* ---------------- RENDER MATCH ---------------- */
+
+function renderMatch(){
+
+let html=`
+
+<div class="flex flex-col h-full">
+
+<div class="flex justify-between bg-slate-800 text-white p-2 text-sm">
+
+<button onclick="home()" class="bg-gray-600 px-2 py-1 rounded">Back</button>
+
+<div>${currentMatch.blueTeam} ${score("blue")} - ${score("white")} ${currentMatch.whiteTeam}</div>
+
+<button onclick="home()" class="bg-red-600 px-2 py-1 rounded">End</button>
+
+</div>
+
+<div class="flex flex-1">
+
+<div class="w-1/2 bg-blue-900 text-white p-2 overflow-y-auto">
+${renderList("blue")}
+</div>
+
+<div class="w-1/2 bg-gray-100 text-black p-2 overflow-y-auto">
+${renderList("white")}
+</div>
+
+</div>
+
+<div class="h-20 overflow-y-scroll bg-slate-800 text-white text-xs p-2">
+${timeline()}
+</div>
+
+</div>
+`;
+
+/* POPUP */
+
+if(selectedPlayer){
+
+html+=`
+<div class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center">
+
+<div class="bg-white text-black w-2/5 h-2/5 grid grid-cols-3 gap-2 p-4 text-sm font-bold">
+
+<button onclick="action('goal')" class="bg-green-500">Goal</button>
+<button onclick="action('miss')" class="bg-gray-400">Missed</button>
+<button onclick="action('shot_saved')" class="bg-blue-300">Saved</button>
+
+<button onclick="action('exclusion')" class="bg-yellow-400">Excl</button>
+<button onclick="action('5m_foul')" class="bg-orange-400">5m</button>
+<button onclick="action('5m_goal')" class="bg-green-700 text-white">5m Goal</button>
+
+<button onclick="action('5m_miss')" class="bg-gray-600 text-white">5m Miss</button>
+<button onclick="action('5m_saved')" class="bg-blue-600 text-white">5m Saved</button>
+<button onclick="selectedPlayer=null;renderMatch()" class="bg-red-500">Cancel</button>
+
+</div>
+
+</div>
+`;
+}
+
+document.getElementById("app").innerHTML=html;
+}
+
+/* ---------------- START ---------------- */
+
+home();
+
+</script>
+
+</body>
+</html>
